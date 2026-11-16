@@ -57,11 +57,14 @@ export function createHud() {
       hpFill.style.background = v > 50 ? 'var(--gold)' : v > 25 ? '#d08a3e' : 'var(--blood)';
     },
     setMoney(m) { set('money', moneyText, `$${m}`); },
-    setAmmo(mag, reserve, name, grenades) {
+    setAmmo(mag, reserve, name, grenades, smokes = 0) {
       set('mag', ammoMag, `${mag}`);
       set('res', ammoReserve, `/ ${reserve}`);
       set('wname', weaponName, name);
-      set('nade', grenadeText, grenades > 0 ? `Mossfire × ${grenades} — G` : '');
+      const kit = [];
+      if (grenades > 0) kit.push(`Mossfire × ${grenades} — G`);
+      if (smokes > 0) kit.push(`Smoke × ${smokes} — H`);
+      set('nade', grenadeText, kit.join(' · '));
       ammoBox.classList.toggle('empty', mag === 0);
     },
     setTimer(seconds, urgent) {
@@ -76,11 +79,12 @@ export function createHud() {
     setCrosshairSpread(px) {
       crosshair.style.setProperty('--gap', `${Math.round(px)}px`);
     },
-    hitMarker(killed) {
+    hitMarker(killed, headshot = false) {
       hitmarker.classList.add('on');
       hitmarker.classList.toggle('kill', !!killed);
+      hitmarker.classList.toggle('headshot', !!headshot);
       clearTimeout(hitTimer);
-      hitTimer = setTimeout(() => hitmarker.classList.remove('on'), killed ? 220 : 110);
+      hitTimer = setTimeout(() => hitmarker.classList.remove('on'), headshot ? 260 : killed ? 220 : 110);
     },
     hurtFlash() {
       vignette.classList.add('on');
@@ -95,13 +99,15 @@ export function createHud() {
       bannerTimer = setTimeout(() => { banner.hidden = true; }, holdMs);
     },
     hideBanner() { banner.hidden = true; },
-    feed(message, gold) {
+    feed(message, gold, headshot = false) {
       const row = document.createElement('div');
-      row.className = gold ? 'feed-row gold' : 'feed-row';
+      row.className = `feed-row${gold ? ' gold' : ''}${headshot ? ' headshot' : ''}`;
       row.textContent = message;
       feed.appendChild(row);
       while (feed.children.length > 5) feed.removeChild(feed.firstChild);
-      setTimeout(() => { if (row.parentNode) row.parentNode.removeChild(row); }, 5200);
+      // Rows fade out over their last half-second instead of vanishing.
+      setTimeout(() => { row.style.opacity = '0'; }, 4700);
+      setTimeout(() => { if (row.parentNode) row.parentNode.removeChild(row); }, 5250);
     },
     // The buy panel doubles as the start overlay's loadout view in screenshot mode.
     showBuy({ money, rows, phaseText }) {

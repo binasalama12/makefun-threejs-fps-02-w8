@@ -1,5 +1,9 @@
 // The armoury of Citadel Heights. Five invented firearms, each with its own price,
-// damage, cadence, magazine and accuracy character, plus the Mossfire grenade.
+// damage, cadence, magazine and accuracy character, plus the Mossfire grenade
+// and the smoke canister (its behaviour lives in smoke.js; this module only
+// tracks how many the player carries). Every gun prices a head hit separately
+// through headMult: a distinct, smaller head hitbox on each bot multiplies the
+// shot's damage — up to fourfold on the Bulwark — so precision is paid for.
 // Spread is the tactical heart: it is tight when the shooter stands still, tighter
 // still crouched, and blooms hard while running, jumping or holding the trigger
 // down, so the game rewards stopping to aim. This module owns the numbers and the
@@ -10,31 +14,31 @@ import { PALETTE } from './palette.js';
 export const WEAPONS = {
   thornspike: {
     id: 'thornspike', name: 'Thornspike Sidearm', short: 'Thornspike', price: 0, kind: 'pistol',
-    damage: 34, headMult: 2.6, mag: 12, reserve: 60, fireGap: 0.17, reloadTime: 1.25,
+    damage: 34, headMult: 3.2, mag: 12, reserve: 60, fireGap: 0.17, reloadTime: 1.25,
     spreadStill: 0.004, spreadMove: 0.03, bloomPerShot: 0.004, pellets: 1, range: 70,
     auto: false, sound: 'pistol',
   },
   gatewasp: {
     id: 'gatewasp', name: 'Gatewasp Repeater', short: 'Gatewasp', price: 950, kind: 'smg',
-    damage: 22, headMult: 2.2, mag: 32, reserve: 128, fireGap: 0.072, reloadTime: 1.7,
+    damage: 22, headMult: 2.8, mag: 32, reserve: 128, fireGap: 0.072, reloadTime: 1.7,
     spreadStill: 0.009, spreadMove: 0.045, bloomPerShot: 0.0035, pellets: 1, range: 55,
     auto: true, sound: 'smg',
   },
   scatter: {
     id: 'scatter', name: 'Rampart Scattergun', short: 'Scattergun', price: 1150, kind: 'scatter',
-    damage: 10, headMult: 1.6, mag: 6, reserve: 30, fireGap: 0.88, reloadTime: 2.6,
+    damage: 10, headMult: 2.0, mag: 6, reserve: 30, fireGap: 0.88, reloadTime: 2.6,
     spreadStill: 0.035, spreadMove: 0.055, bloomPerShot: 0.01, pellets: 8, range: 26,
     auto: false, sound: 'scatter',
   },
   bulwark: {
     id: 'bulwark', name: 'Bulwark Carbine', short: 'Bulwark', price: 2400, kind: 'rifle',
-    damage: 41, headMult: 2.8, mag: 25, reserve: 100, fireGap: 0.108, reloadTime: 1.9,
+    damage: 41, headMult: 4.0, mag: 25, reserve: 100, fireGap: 0.108, reloadTime: 1.9,
     spreadStill: 0.0022, spreadMove: 0.032, bloomPerShot: 0.005, pellets: 1, range: 90,
     auto: true, sound: 'rifle',
   },
   longshot: {
     id: 'longshot', name: 'Citadel Longshot', short: 'Longshot', price: 3400, kind: 'sniper',
-    damage: 96, headMult: 2.4, mag: 5, reserve: 25, fireGap: 1.15, reloadTime: 2.4,
+    damage: 96, headMult: 3.0, mag: 5, reserve: 25, fireGap: 1.15, reloadTime: 2.4,
     spreadStill: 0.0006, spreadMove: 0.05, bloomPerShot: 0.01, pellets: 1, range: 140,
     auto: false, sound: 'sniper', scoped: true,
   },
@@ -110,7 +114,7 @@ export function createArsenal(camera) {
   for (const id of BUY_ORDER) ammo[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve };
   const state = {
     current: 'thornspike', cooldown: 0, reloadLeft: 0, flashLeft: 0,
-    bloom: 0, kick: 0, grenades: 0, scoped: false,
+    bloom: 0, kick: 0, grenades: 0, smokes: 0, scoped: false,
   };
 
   function def() { return WEAPONS[state.current]; }

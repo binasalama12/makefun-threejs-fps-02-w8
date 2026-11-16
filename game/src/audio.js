@@ -74,7 +74,12 @@ export function createAudio() {
     reloadStart() { tone({ freq: 500, dur: 0.05, gain: 0.2, type: 'square' }); tone({ freq: 320, dur: 0.05, gain: 0.2, type: 'square', delay: 0.09 }); },
     reloadEnd() { tone({ freq: 700, dur: 0.05, gain: 0.22, type: 'square' }); tone({ freq: 980, dur: 0.06, gain: 0.22, type: 'square', delay: 0.07 }); },
     hit() { tone({ freq: 1560, dur: 0.05, gain: 0.2, type: 'sine' }); },
+    // A head hit rings a full octave above a body hit, with a bright harmonic
+    // on top, so the ear learns the head hitbox before the eye reads the marker.
+    headshotHit() { tone({ freq: 2340, dur: 0.06, gain: 0.24, type: 'sine' }); tone({ freq: 3520, dur: 0.05, gain: 0.14, type: 'sine', delay: 0.02 }); },
     kill() { tone({ freq: 880, dur: 0.08, gain: 0.25, type: 'sine' }); tone({ freq: 1320, dur: 0.12, gain: 0.25, type: 'sine', delay: 0.07 }); },
+    headshotKill() { tone({ freq: 1175, dur: 0.08, gain: 0.26, type: 'sine' }); tone({ freq: 2340, dur: 0.14, gain: 0.26, type: 'sine', delay: 0.06 }); },
+    smokePop() { burst({ dur: 0.5, freq: 650, gain: 0.32, type: 'lowpass', sweepTo: 180 }); },
     hurt() { burst({ dur: 0.1, freq: 300, gain: 0.35, type: 'lowpass' }); },
     buy() { tone({ freq: 1040, dur: 0.06, gain: 0.2, type: 'sine' }); tone({ freq: 1560, dur: 0.09, gain: 0.2, type: 'sine', delay: 0.06 }); },
     denied() { tone({ freq: 180, dur: 0.12, gain: 0.25, type: 'sawtooth' }); },

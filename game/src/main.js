@@ -15,6 +15,7 @@ import { createArsenal, WEAPONS, BUY_ORDER, GRENADE_PRICE, GRENADE_DAMAGE, GRENA
 import { createBots } from './bots.js';
 import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
+import { createSmokeSystem, SMOKE_PRICE } from './smoke.js';
 
 const FIXED_STEP = 1 / 60;
 const ROUND_TIME = 100;
@@ -48,6 +49,7 @@ const arsenal = createArsenal(camera);
 const bots = createBots(scene, rng);
 const hud = createHud();
 const audio = createAudio();
+const smoke = createSmokeSystem(scene, () => audio.smokePop());
 const input = createInput(renderer.domElement, onLockChange);
 
 const ALLY_NAMES = ['Bram', 'Sella', 'Odo'];
@@ -82,7 +84,10 @@ function losClear(from, to) {
   raycaster.set(from, tmpDir);
   raycaster.far = dist;
   const hit = raycaster.intersectObjects(world.shootables, false)[0];
-  return !hit || hit.distance >= dist - 0.7;
+  if (hit && hit.distance < dist - 0.7) return false;
+  // A bloomed smoke cloud blocks sight exactly like a wall does; bullets are
+  // unaffected, only vision is.
+  return !smoke.blocksLOS(from, to);
 }
 
 function blockedAt(x, z, y) {
@@ -192,7 +197,7 @@ function syncHud() {
   const a = arsenal.cur();
   hud.setHealth(G.playerHp);
   hud.setMoney(G.money);
-  hud.setAmmo(a.mag, a.reserve, arsenal.def().name, arsenal.state.grenades);
+  hud.setAmmo(a.mag, a.reserve, arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
   hud.setScore(G.scoreW, G.scoreA);
   hud.setAlive(aliveCount('warden'), aliveCount('ashen'));
   hud.setRound(G.round, ROUNDS_TOTAL);
@@ -204,6 +209,7 @@ function buyRows() {
     price: WEAPONS[id].price, owned: arsenal.owns(id), affordable: G.money >= WEAPONS[id].price,
   }));
   rows.push({ key: '6', label: 'Mossfire Grenade — area blast', price: GRENADE_PRICE, owned: false, affordable: G.money >= GRENADE_PRICE });
+  rows.push({ key: '7', label: 'Smoke Grenade — blocks enemy sight', price: SMOKE_PRICE, owned: false, affordable: G.money >= SMOKE_PRICE });
   return rows;
 }
 function showBuyPanel() {
@@ -234,12 +240,13 @@ function startRound() {
   botCtx.objective.planted = false;
   grenade.active = false;
   grenadeMesh.visible = false;
+  smoke.reset();
   world.resetGate();
   player.placeAt(WARDEN_SPAWNS[1], 0);
   bots.reset(botSpawns);
   arsenal.refillAll();
   hud.hideBoard();
-  hud.setObjective('Buy phase — keys 1–5 weapons, 6 grenade');
+  hud.setObjective('Buy phase — keys 1–5 weapons, 6 grenade, 7 smoke');
   hud.showBanner(`ROUND ${G.round}`, 'Gilded Wardens attack · Ashen Covenant defend', 2200);
   showBuyPanel();
   syncHud();
@@ -300,18 +307,22 @@ function fireWeapon() {
     if (hit && hit.object.userData.bot) {
       const bot = hit.object.userData.bot;
       if (bot.alive) {
-        const part = hit.object.userData.part;
-        let dmg = def.damage * (part === 'head' ? def.headMult : 1);
+        // Head hitbox: the small head mesh multiplies damage by the weapon's
+        // headMult, rings a brighter marker and a higher hit sound, pays a
+        // bonus, and is tagged HEADSHOT in the kill feed.
+        const isHead = hit.object.userData.part === 'head';
+        let dmg = def.damage * (isHead ? def.headMult : 1);
         const dist = hit.distance;
         if (dist > def.range * 0.55) dmg *= Math.max(0.35, 1 - (dist - def.range * 0.55) / def.range);
         const killed = bots.damage(bot, dmg);
-        hud.hitMarker(killed);
+        hud.hitMarker(killed, isHead);
         if (killed) {
-          G.money += 300;
+          G.money += 300 + (isHead ? 100 : 0);
           if (bot.team === 'ashen') G.kills += 1;
-          hud.feed(`${bot.team === 'ashen' ? 'You' : 'A Warden'} felled ${bot.name} — ${def.short}`, bot.team === 'ashen');
-          audio.kill();
-        } else audio.hit();
+          hud.feed(`${bot.team === 'ashen' ? 'You' : 'A Warden'} felled ${bot.name} — ${def.short}${isHead ? ' · HEADSHOT' : ''}`, bot.team === 'ashen', isHead);
+          if (isHead) audio.headshotKill(); else audio.kill();
+        } else if (isHead) audio.headshotHit();
+        else audio.hit();
         syncHud();
       }
     }
@@ -320,7 +331,7 @@ function fireWeapon() {
   if (arsenal.cur().mag === 0) arsenal.reload();
 }
 
-function damagePlayer(amount, sourceName) {
+function damagePlayer(amount, sourceName, wasHead = false) {
   if (!G.playerAlive || G.phase === 'roundEnd' || G.phase === 'matchEnd') return;
   G.playerHp -= amount;
   hud.hurtFlash();
@@ -329,7 +340,7 @@ function damagePlayer(amount, sourceName) {
     G.playerHp = 0;
     G.playerAlive = false;
     G.deaths += 1;
-    hud.feed(`${sourceName} felled you`, false);
+    hud.feed(`${sourceName} felled you — Carbine${wasHead ? ' · HEADSHOT' : ''}`, false, wasHead);
     hud.showBanner('YOU FELL', 'Your Wardens fight on without you', 2200);
   }
   syncHud();
@@ -356,11 +367,11 @@ function botShoot(bot, foe) {
   const head = rng() < 0.12;
   const dmg = bot.damage * (head ? 2.1 : 1) * (0.8 + rng() * 0.45);
   if (foe.isPlayer) {
-    damagePlayer(dmg, bot.name);
+    damagePlayer(dmg, bot.name, head);
   } else if (foe.ref.alive) {
     const killed = bots.damage(foe.ref, dmg);
     if (killed) {
-      hud.feed(`${bot.name} felled ${foe.ref.name}`, bot.team === 'ashen');
+      hud.feed(`${bot.name} felled ${foe.ref.name} — Carbine${head ? ' · HEADSHOT' : ''}`, bot.team === 'ashen', head);
       checkRoundEnd();
     }
   }
@@ -379,6 +390,16 @@ const botCtx = {
     endRound('ashen', 'The gate-charge was defused at the doors.');
   },
 };
+
+const smokeDir = new THREE.Vector3();
+function throwSmoke() {
+  if (arsenal.state.smokes <= 0 || smoke.projectileActive) return;
+  camera.getWorldDirection(smokeDir);
+  if (!smoke.throwFrom(camera.position, smokeDir)) return;
+  arsenal.state.smokes -= 1;
+  audio.throwWhoosh();
+  syncHud();
+}
 
 function throwGrenade() {
   if (arsenal.state.grenades <= 0 || grenade.active) return;
@@ -533,6 +554,7 @@ function step(dt) {
     const w = arsenal.step(dt);
     if (w === 'reloaded') audio.reloadEnd();
     stepGrenade(dt);
+    smoke.step(dt);
     checkRoundEnd();
   }
   stepTracers(dt);
@@ -580,6 +602,16 @@ function handlePressed(pressed) {
       syncHud();
       showBuyPanel();
     }
+    if (pressed.has('Digit7')) {
+      if (G.money >= SMOKE_PRICE && arsenal.state.smokes < 2) {
+        G.money -= SMOKE_PRICE;
+        arsenal.state.smokes += 1;
+        audio.buy();
+        hud.feed('Bought a Smoke Grenade', true);
+      } else audio.denied();
+      syncHud();
+      showBuyPanel();
+    }
     return;
   }
   if (G.phase !== 'live' && G.phase !== 'planted') return;
@@ -587,6 +619,7 @@ function handlePressed(pressed) {
     if (pressed.has(`Digit${i + 1}`) && arsenal.owns(BUY_ORDER[i])) arsenal.equip(BUY_ORDER[i]);
   }
   if (pressed.has('KeyG')) throwGrenade();
+  if (pressed.has('KeyH')) throwSmoke();
   syncHud();
 }
 
@@ -685,6 +718,10 @@ function runShot(name) {
     arsenal.equip('bulwark');
     arsenal.cur().mag = 17;
     arsenal.state.grenades = 1;
+    arsenal.state.smokes = 1;
+    // A smoke cloud already bloomed in the mid lane, so the staged fight
+    // shows the new sight-blocker at work.
+    smoke.bloomAt(new THREE.Vector3(-3.2, 0, -0.5), 3);
     G.playerHp = 72;
     G.money = 2650;
     G.round = 6;

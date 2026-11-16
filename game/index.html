@@ -38,6 +38,7 @@
   #hitmarker.on { opacity: 1; }
   #hitmarker i { position: absolute; background: var(--ink); }
   #hitmarker.kill i { background: var(--gold); }
+  #hitmarker.headshot i { background: #ff8c42; }
   #hitmarker i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
   #hitmarker i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
   #hitmarker i:nth-child(3) { top: 12px; left: 0; height: 2px; width: 8px; }
@@ -81,8 +82,9 @@
   #grenade-text { font-size: 12px; color: #a9bf97; margin-top: 4px; min-height: 15px; }
 
   #killfeed { position: fixed; top: 84px; right: 22px; display: grid; gap: 4px; justify-items: end; font-family: var(--font-readout); font-size: 12px; }
-  .feed-row { background: var(--panel); border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 9px; color: var(--stone-pale); }
+  .feed-row { background: var(--panel); border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 9px; color: var(--stone-pale); transition: opacity 500ms linear; }
   .feed-row.gold { color: var(--gold); }
+  .feed-row.headshot { color: #ff8c42; border-color: rgba(255, 140, 66, .55); }
 
   #banner { position: fixed; top: 24%; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
   #banner[hidden] { display: none; }
@@ -185,6 +187,7 @@
       <li><span><kbd>Space</kbd></span> Jump · <kbd>Shift</kbd> not used — stop to aim</li>
       <li><span><kbd>1–5</kbd></span> Buy / equip weapons</li>
       <li><span><kbd>6</kbd>/<kbd>G</kbd></span> Mossfire grenade</li>
+      <li><span><kbd>7</kbd>/<kbd>H</kbd></span> Smoke grenade — blocks sight</li>
       <li><span><kbd>F</kbd> hold</span> Plant the gate-charge</li>
       <li><span><kbd>B</kbd></span> Buy panel during buy phase</li>
     </ul>

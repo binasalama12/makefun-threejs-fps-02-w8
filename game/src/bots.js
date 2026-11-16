@@ -128,6 +128,8 @@ export function createBots(scene, rng) {
       bot.fall = 0;
       bot.state = bot.role === 'post' ? 'hold' : 'advance';
       bot.node = nearestNode(s.post);
+      // Spawn records carry the assignment as goalNode (see main.js); reading
+      // any other key here silently left every patrol goal undefined.
       bot.goalNode = s.goalNode;
       bot.homeNode = s.goalNode;
       bot.altNode = PATROL_PAIR[s.goalNode] ?? s.goalNode;
