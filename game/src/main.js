@@ -71,6 +71,12 @@ bots.spawn({ name: 'Ysolde', team: 'ashen', post: ASHEN_SPAWNS[3], startNode: 11
 botSpawns.push({ post: ASHEN_SPAWNS[3], goalNode: 11 });
 
 // ---- shared combat plumbing -------------------------------------------------
+// Every ray target in one list, built once: world solids never change and all
+// bot hit meshes are spawned above, so fireWeapon never rebuilds the list.
+const shootTargets = world.shootables.concat(bots.hitMeshes);
+// One shared empty key set for the buy-phase freeze, instead of a fresh
+// allocation on every fixed step.
+const EMPTY_KEYS = new Set();
 const raycaster = new THREE.Raycaster();
 const tmpDir = new THREE.Vector3();
 const tmpFrom = new THREE.Vector3();
@@ -300,8 +306,7 @@ function fireWeapon() {
     shootDir.normalize();
     raycaster.set(camera.position, shootDir);
     raycaster.far = def.range;
-    const targets = world.shootables.concat(bots.hitMeshes);
-    const hit = raycaster.intersectObjects(targets, false)[0];
+    const hit = raycaster.intersectObjects(shootTargets, false)[0];
     const end = hit ? hit.point : tmpTo.copy(shootDir).multiplyScalar(def.range).add(camera.position);
     tracer(muzzle, end, PALETTE.gold);
     if (hit && hit.object.userData.bot) {
@@ -548,7 +553,7 @@ function step(dt) {
 
   if (inRound) {
     if (G.playerAlive && G.phase !== 'buy') player.step(dt, input.state.keys);
-    else if (G.playerAlive) player.step(dt, new Set()); // frozen feet during buy, eyes free
+    else if (G.playerAlive) player.step(dt, EMPTY_KEYS); // frozen feet during buy, eyes free
     refreshFoes();
     if (G.phase !== 'buy') bots.step(dt, botCtx);
     const w = arsenal.step(dt);

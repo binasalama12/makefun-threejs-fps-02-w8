@@ -14,7 +14,3 @@ export function mulberry32(initial) {
 export function range(rng, low, high) {
   return low + rng() * (high - low);
 }
-
-export function pick(rng, list) {
-  return list[Math.floor(rng() * list.length) % list.length];
-}

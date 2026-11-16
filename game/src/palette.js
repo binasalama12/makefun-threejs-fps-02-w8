@@ -15,7 +15,3 @@ export const PALETTE = {
   ink: '#ece7da',
   blood: '#b0483e',
 };
-
-export function colour(name) {
-  return PALETTE[name];
-}

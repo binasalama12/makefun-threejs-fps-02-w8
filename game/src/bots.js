@@ -68,7 +68,8 @@ export function createBots(scene, rng) {
       group: fig.group, torso: fig.torso, head: fig.head, legL: fig.legL, legR: fig.legR,
       pos: post.clone(), yaw: team === 'warden' ? 0 : Math.PI,
       hp: 100, alive: true, fall: 0, walkPhase: rng() * 6,
-      node: startNode, goalNode: startNode, homeNode: startNode, altNode: startNode, patrolTimer: 10, holdPos: post.clone(),
+      node: startNode, homeNode: startNode, altNode: startNode, patrolTimer: 10,
+      lastKnownVec: new THREE.Vector3(), alertVec: new THREE.Vector3(),
       state: role === 'post' ? 'hold' : 'advance',
       burstLeft: 0, burstWait: range(rng, 0.2, 0.9), fireCd: 0,
       reaction: 0, targetSeenAt: -9, lastKnown: null, alertPos: null,
@@ -94,22 +95,41 @@ export function createBots(scene, rng) {
   }
 
   // Breadth-first hop across the waypoint web toward a destination node.
+  // Runs per bot per step while patrolling, so it works out of preallocated
+  // arrays with a generation stamp instead of a fresh Map and queue per call.
+  const bfsPrev = new Int16Array(WAYPOINTS.length);
+  const bfsSeen = new Int32Array(WAYPOINTS.length);
+  const bfsQueue = new Array(WAYPOINTS.length);
+  let bfsStamp = 0;
   function nextHop(from, to) {
     if (from === to) return to;
-    const prev = new Map([[from, -1]]);
-    const queue = [from];
-    while (queue.length) {
-      const cur = queue.shift();
+    bfsStamp += 1;
+    let head = 0;
+    let tail = 0;
+    bfsQueue[tail] = from; tail += 1;
+    bfsSeen[from] = bfsStamp;
+    bfsPrev[from] = -1;
+    while (head < tail) {
+      const cur = bfsQueue[head]; head += 1;
       if (cur === to) break;
       for (const n of WAYPOINTS[cur].next) {
-        if (!prev.has(n)) { prev.set(n, cur); queue.push(n); }
+        if (bfsSeen[n] !== bfsStamp) {
+          bfsSeen[n] = bfsStamp;
+          bfsPrev[n] = cur;
+          bfsQueue[tail] = n; tail += 1;
+        }
       }
     }
-    if (!prev.has(to)) return from;
+    if (bfsSeen[to] !== bfsStamp) return from;
     let cur = to;
-    while (prev.get(cur) !== from && prev.get(cur) !== -1) cur = prev.get(cur);
+    while (bfsPrev[cur] !== from && bfsPrev[cur] !== -1) cur = bfsPrev[cur];
     return cur;
   }
+
+  // Per-step scratch vectors, reused by every bot in turn: the step consumes
+  // each value inside the same bot's iteration, so sharing them is safe.
+  const tmpEye = new THREE.Vector3();
+  const tmpGoal = new THREE.Vector3();
 
   // Patrol pairings: a ground bot works two assignments in turn instead of
   // camping one node all round, so lanes are re-watched and pushes meet fresh
@@ -164,7 +184,7 @@ export function createBots(scene, rng) {
         continue;
       }
       bot.group.rotation.x = 0;
-      const eye = new THREE.Vector3(bot.pos.x, bot.pos.y + EYE, bot.pos.z);
+      const eye = tmpEye.set(bot.pos.x, bot.pos.y + EYE, bot.pos.z);
 
       // --- perception: nearest visible foe, refreshed every step ---
       let foe = null;
@@ -176,7 +196,8 @@ export function createBots(scene, rng) {
         if (ctx.losClear(eye, f.eyePos)) { foe = f; foeDist = d; }
       }
       if (foe) {
-        bot.lastKnown = foe.pos.clone();
+        bot.lastKnownVec.copy(foe.pos);
+        bot.lastKnown = bot.lastKnownVec;
         bot.targetSeenAt = ctx.time;
         bot.reaction += dt;
       } else {
@@ -204,7 +225,7 @@ export function createBots(scene, rng) {
         wantFire = true;
         bot.yaw = Math.atan2(-(foe.pos.x - bot.pos.x), -(foe.pos.z - bot.pos.z));
         // Keep a fighting distance: back off if crowded, close if far.
-        if (foeDist < 6) goal = new THREE.Vector3(bot.pos.x - (foe.pos.x - bot.pos.x), bot.pos.y, bot.pos.z - (foe.pos.z - bot.pos.z));
+        if (foeDist < 6) goal = tmpGoal.set(bot.pos.x - (foe.pos.x - bot.pos.x), bot.pos.y, bot.pos.z - (foe.pos.z - bot.pos.z));
         else if (foeDist > 20) goal = foe.pos;
         else {
           // Strafe sideways while fighting, flipping direction now and then.
@@ -212,7 +233,7 @@ export function createBots(scene, rng) {
           if (bot.strafeFlip <= 0) { bot.strafeDir = rng() > 0.5 ? 1 : -1; bot.strafeFlip = range(rng, 0.7, 1.6); }
           const px = Math.cos(bot.yaw) * bot.strafeDir;
           const pz = -Math.sin(bot.yaw) * bot.strafeDir;
-          goal = new THREE.Vector3(bot.pos.x + px * 2.2, bot.pos.y, bot.pos.z + pz * 2.2);
+          goal = tmpGoal.set(bot.pos.x + px * 2.2, bot.pos.y, bot.pos.z + pz * 2.2);
         }
       } else if (bot.lastKnown && ctx.time - bot.targetSeenAt < 4) {
         goal = bot.lastKnown;
@@ -285,7 +306,10 @@ export function createBots(scene, rng) {
   function hearShot(pos) {
     for (const bot of bots) {
       if (!bot.alive || bot.role === 'post') continue;
-      if (bot.pos.distanceTo(pos) < HEAR_RANGE && !bot.lastKnown) bot.alertPos = pos.clone();
+      if (bot.pos.distanceTo(pos) < HEAR_RANGE && !bot.lastKnown) {
+        bot.alertVec.copy(pos);
+        bot.alertPos = bot.alertVec;
+      }
     }
   }
 

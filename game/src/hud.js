@@ -98,7 +98,6 @@ export function createHud() {
       clearTimeout(bannerTimer);
       bannerTimer = setTimeout(() => { banner.hidden = true; }, holdMs);
     },
-    hideBanner() { banner.hidden = true; },
     feed(message, gold, headshot = false) {
       const row = document.createElement('div');
       row.className = `feed-row${gold ? ' gold' : ''}${headshot ? ' headshot' : ''}`;
